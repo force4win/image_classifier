@@ -82,7 +82,7 @@ class ImageClassifierApp(customtkinter.CTk):
         self.current_group_display_label.grid(row=2, column=0, columnspan=2, pady=5)
 
         # Checkbox para opción de renombrado
-        self.rename_option_var = customtkinter.StringVar(value="full_rename") # Default to full rename
+        self.rename_option_var = customtkinter.StringVar(value="add_suffix") # Default to add suffix
         self.full_rename_radio = customtkinter.CTkRadioButton(self.right_frame, text="Renombrar completamente (Grupo_001.ext)",
                                                               variable=self.rename_option_var, value="full_rename")
         self.full_rename_radio.grid(row=4, column=0, pady=(10, 0), sticky="w")
@@ -137,21 +137,22 @@ class ImageClassifierApp(customtkinter.CTk):
                     
                     # Attempt to parse group name from filename
                     group_name = None
+                    base_name = os.path.splitext(filename)[0] # Get filename without extension
                     
-                    # Try to match full_rename pattern: GroupName_001.ext
-                    match_full = re.match(r"(.+?)_\d{3}\.(png|jpg|jpeg|gif|bmp)$", filename, re.IGNORECASE)
-                    if match_full:
-                        group_name = match_full.group(1)
-                    else:
-                        # Try to match add_suffix pattern: OriginalName_GroupName.ext
-                        # This regex assumes the group name is the last part before the extension,
-                        # separated by an underscore, and doesn't contain numbers at the end like _001
-                        match_suffix = re.match(r"(.+?)_([A-Za-z\s]+)\.(png|jpg|jpeg|gif|bmp)$", filename, re.IGNORECASE)
-                        if match_suffix:
-                            # Ensure the captured group name is not just a number (like _001)
-                            potential_group = match_suffix.group(2)
-                            if not potential_group.isdigit(): # Simple check to avoid matching _001 as group
-                                group_name = potential_group
+                    # Prioritize add_suffix pattern: OriginalName_GroupName.ext
+                    # Look for _GroupName at the very end of the base_name
+                    match_suffix = re.search(r"_([A-Za-z0-9\s-]+)$", base_name, re.IGNORECASE) # More flexible regex
+                    if match_suffix:
+                        potential_group = match_suffix.group(1)
+                        # Ensure the captured group name is not just a number
+                        if not potential_group.isdigit():
+                            group_name = potential_group
+                    
+                    # If no suffix group found, try full_rename pattern: GroupName_001.ext
+                    if not group_name:
+                        match_full = re.search(r"(.+?)_(\d{3})$", base_name, re.IGNORECASE) # Capture group name
+                        if match_full:
+                            group_name = match_full.group(1) # Extract the group name
                     
                     if group_name:
                         self.image_groups[full_path] = group_name
@@ -159,9 +160,17 @@ class ImageClassifierApp(customtkinter.CTk):
         self.image_files.sort() # Sort images for consistent order
         self.current_image_index = -1
         
-        # Collect unique group names for buttons
-        unique_groups = sorted(list(set(self.image_groups.values())))
-        self.create_group_buttons(unique_groups)
+        # Collect unique group names and their first image for buttons
+        unique_groups_with_images = {} # {group_name: first_image_path}
+        for img_path in self.image_files:
+            group_name = self.image_groups.get(img_path)
+            if group_name and group_name not in unique_groups_with_images:
+                unique_groups_with_images[group_name] = img_path
+        
+        # Sort groups by name
+        sorted_unique_groups_with_images = {k: unique_groups_with_images[k] for k in sorted(unique_groups_with_images)}
+        
+        self.create_group_buttons(sorted_unique_groups_with_images)
 
         if self.image_files:
             self.current_image_index = 0
@@ -306,20 +315,45 @@ class ImageClassifierApp(customtkinter.CTk):
         self.image_groups = {}
         self.load_images_from_folder() # Reload images from the current folder
 
-    def create_group_buttons(self, unique_groups):
+    def create_group_buttons(self, unique_groups_with_images):
         # Clear existing buttons
         for widget in self.detected_groups_frame.winfo_children():
             widget.destroy()
         
-        if not unique_groups:
+        # Configure grid for the scrollable frame
+        self.detected_groups_frame.grid_columnconfigure((0, 1, 2), weight=1) # 3 columns, equally weighted
+
+        if not unique_groups_with_images:
             label = customtkinter.CTkLabel(self.detected_groups_frame, text="No hay grupos detectados.")
-            label.pack(pady=5, padx=5)
+            label.grid(row=0, column=0, columnspan=3, pady=5, padx=5)
             return
 
-        for group_name in unique_groups:
-            button = customtkinter.CTkButton(self.detected_groups_frame, text=group_name, 
-                                             command=lambda g=group_name: self.assign_group_from_button(g))
-            button.pack(pady=2, padx=5, fill="x")
+        button_image_size = (60, 60) # Fixed square size for button images
+        row_idx = 0
+        col_idx = 0
+        max_cols = 3
+
+        for group_name, image_path in unique_groups_with_images.items():
+            try:
+                pil_image = Image.open(image_path)
+                pil_image.thumbnail(button_image_size, Image.LANCZOS)
+                ctk_image = customtkinter.CTkImage(light_image=pil_image, dark_image=pil_image, size=button_image_size)
+                
+                button = customtkinter.CTkButton(self.detected_groups_frame, text=group_name, 
+                                                 image=ctk_image, compound="top", # Changed to "top"
+                                                 command=lambda g=group_name: self.assign_group_from_button(g))
+                button.grid(row=row_idx, column=col_idx, pady=2, padx=2, sticky="ew")
+            except Exception as e:
+                print(f"Error al cargar la imagen para el botón del grupo '{group_name}': {e}")
+                # Fallback to text-only button if image fails to load
+                button = customtkinter.CTkButton(self.detected_groups_frame, text=group_name, 
+                                                 command=lambda g=group_name: self.assign_group_from_button(g))
+                button.grid(row=row_idx, column=col_idx, pady=2, padx=2, sticky="ew")
+            
+            col_idx += 1
+            if col_idx >= max_cols:
+                col_idx = 0
+                row_idx += 1
 
     def assign_group_from_button(self, group_name):
         self.group_entry.delete(0, "end")
