@@ -9,35 +9,29 @@ class ImageClassifierApp(customtkinter.CTk):
         super().__init__()
 
         self.title("Clasificador de Imágenes")
-        self.geometry("1000x800") # Increased size for image display
+        self.geometry("1200x800") # Increased size for horizontal layout
 
         self.image_files = []
         self.current_image_index = -1
         self.folder_path = None
         self.image_groups = {} # Dictionary to store image_path: group_name
 
-        # Frame para la imagen y los controles
-        self.image_frame = customtkinter.CTkFrame(self)
-        self.image_frame.pack(pady=10, padx=10, fill="both", expand=True)
+        # Configure grid layout for the main window
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=3) # Left 3/4
+        self.grid_columnconfigure(1, weight=1) # Right 1/4
 
-        self.displayed_image_label = customtkinter.CTkLabel(self.image_frame, text="")
-        self.displayed_image_label.pack(pady=10, padx=10, fill="both", expand=True)
+        # Left Frame (Image Display and Navigation)
+        self.left_frame = customtkinter.CTkFrame(self)
+        self.left_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        self.left_frame.grid_rowconfigure(0, weight=1)
+        self.left_frame.grid_columnconfigure(0, weight=1)
 
-        # Etiqueta de bienvenida
-        self.label = customtkinter.CTkLabel(self, text="¡Bienvenido al Clasificador de Imágenes!")
-        self.label.pack(pady=20, padx=20)
+        self.displayed_image_label = customtkinter.CTkLabel(self.left_frame, text="")
+        self.displayed_image_label.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 
-        # Botón para seleccionar carpeta
-        self.select_folder_button = customtkinter.CTkButton(self, text="Seleccionar Carpeta", command=self.select_folder)
-        self.select_folder_button.pack(pady=10)
-
-        # Etiqueta para mostrar la carpeta seleccionada
-        self.folder_path_label = customtkinter.CTkLabel(self, text="Ninguna carpeta seleccionada")
-        self.folder_path_label.pack(pady=5)
-
-        # Controles de navegación de imágenes
-        self.navigation_frame = customtkinter.CTkFrame(self)
-        self.navigation_frame.pack(pady=10)
+        self.navigation_frame = customtkinter.CTkFrame(self.left_frame)
+        self.navigation_frame.grid(row=1, column=0, pady=10)
 
         self.prev_button = customtkinter.CTkButton(self.navigation_frame, text="Anterior", command=self.show_previous_image)
         self.prev_button.pack(side="left", padx=5)
@@ -48,25 +42,44 @@ class ImageClassifierApp(customtkinter.CTk):
         self.next_button = customtkinter.CTkButton(self.navigation_frame, text="Siguiente", command=self.show_next_image)
         self.next_button.pack(side="left", padx=5)
 
-        # Interfaz de clasificación
-        self.classification_frame = customtkinter.CTkFrame(self)
-        self.classification_frame.pack(pady=10)
+        # Right Frame (Controls)
+        self.right_frame = customtkinter.CTkFrame(self)
+        self.right_frame.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+        self.right_frame.grid_rowconfigure(0, weight=0) # Welcome label
+        self.right_frame.grid_rowconfigure(1, weight=0) # Select folder button
+        self.right_frame.grid_rowconfigure(2, weight=0) # Folder path label
+        self.right_frame.grid_rowconfigure(3, weight=0) # Classification frame
+        self.right_frame.grid_rowconfigure(4, weight=1) # Spacer
+        self.right_frame.grid_rowconfigure(5, weight=0) # Rename button
+        self.right_frame.grid_columnconfigure(0, weight=1)
+
+        self.label = customtkinter.CTkLabel(self.right_frame, text="¡Bienvenido al Clasificador de Imágenes!")
+        self.label.grid(row=0, column=0, pady=20, padx=20)
+
+        self.select_folder_button = customtkinter.CTkButton(self.right_frame, text="Seleccionar Carpeta", command=self.select_folder)
+        self.select_folder_button.grid(row=1, column=0, pady=10)
+
+        self.folder_path_label = customtkinter.CTkLabel(self.right_frame, text="Ninguna carpeta seleccionada")
+        self.folder_path_label.grid(row=2, column=0, pady=5)
+
+        self.classification_frame = customtkinter.CTkFrame(self.right_frame) # Reparented
+        self.classification_frame.grid(row=3, column=0, pady=10, padx=10, sticky="ew")
+        self.classification_frame.grid_columnconfigure(1, weight=1) # Make entry expand
 
         self.group_label = customtkinter.CTkLabel(self.classification_frame, text="Nombre del Grupo:")
-        self.group_label.pack(side="left", padx=5)
+        self.group_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
-        self.group_entry = customtkinter.CTkEntry(self.classification_frame, width=200)
-        self.group_entry.pack(side="left", padx=5)
+        self.group_entry = customtkinter.CTkEntry(self.classification_frame) # Reparented
+        self.group_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
-        self.assign_group_button = customtkinter.CTkButton(self.classification_frame, text="Asignar Grupo", command=self.assign_group)
-        self.assign_group_button.pack(side="left", padx=5)
+        self.assign_group_button = customtkinter.CTkButton(self.classification_frame, text="Asignar Grupo", command=self.assign_group) # Reparented
+        self.assign_group_button.grid(row=1, column=0, columnspan=2, pady=5)
 
-        self.current_group_display_label = customtkinter.CTkLabel(self.classification_frame, text="Grupo actual: Ninguno")
-        self.current_group_display_label.pack(side="left", padx=10)
+        self.current_group_display_label = customtkinter.CTkLabel(self.classification_frame, text="Grupo actual: Ninguno") # Reparented
+        self.current_group_display_label.grid(row=2, column=0, columnspan=2, pady=5)
 
-        # Botón para renombrar imágenes
-        self.rename_button = customtkinter.CTkButton(self, text="Renombrar Imágenes", command=self.rename_images, fg_color="red")
-        self.rename_button.pack(pady=20)
+        self.rename_button = customtkinter.CTkButton(self.right_frame, text="Renombrar Imágenes", command=self.rename_images, fg_color="red") # Reparented
+        self.rename_button.grid(row=5, column=0, pady=20)
 
     def select_folder(self):
         folder_path = tkinter.filedialog.askdirectory()
@@ -119,8 +132,8 @@ class ImageClassifierApp(customtkinter.CTk):
                 pil_image = Image.open(image_path)
                 
                 # Resize image to fit within the frame, maintaining aspect ratio
-                max_width = self.image_frame.winfo_width() - 20 # Subtract padding
-                max_height = self.image_frame.winfo_height() - 20 # Subtract padding
+                max_width = self.left_frame.winfo_width() - 20 # Subtract padding
+                max_height = self.left_frame.winfo_height() - 20 # Subtract padding
 
                 if max_width <= 0 or max_height <= 0: # Handle initial state where frame size might be 0
                     max_width = 700
