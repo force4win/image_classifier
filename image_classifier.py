@@ -3,6 +3,7 @@ import tkinter.filedialog
 from PIL import Image, ImageTk
 import os
 import tkinter.messagebox as messagebox
+import re
 
 class ImageClassifierApp(customtkinter.CTk):
     def __init__(self):
@@ -49,8 +50,10 @@ class ImageClassifierApp(customtkinter.CTk):
         self.right_frame.grid_rowconfigure(1, weight=0) # Select folder button
         self.right_frame.grid_rowconfigure(2, weight=0) # Folder path label
         self.right_frame.grid_rowconfigure(3, weight=0) # Classification frame
-        self.right_frame.grid_rowconfigure(4, weight=1) # Spacer
-        self.right_frame.grid_rowconfigure(5, weight=0) # Rename button
+        self.right_frame.grid_rowconfigure(4, weight=0) # Full rename radio
+        self.right_frame.grid_rowconfigure(5, weight=0) # Suffix rename radio
+        self.right_frame.grid_rowconfigure(6, weight=1) # Spacer
+        self.right_frame.grid_rowconfigure(7, weight=0) # Rename button
         self.right_frame.grid_columnconfigure(0, weight=1)
 
         self.label = customtkinter.CTkLabel(self.right_frame, text="¡Bienvenido al Clasificador de Imágenes!")
@@ -78,8 +81,18 @@ class ImageClassifierApp(customtkinter.CTk):
         self.current_group_display_label = customtkinter.CTkLabel(self.classification_frame, text="Grupo actual: Ninguno") # Reparented
         self.current_group_display_label.grid(row=2, column=0, columnspan=2, pady=5)
 
+        # Checkbox para opción de renombrado
+        self.rename_option_var = customtkinter.StringVar(value="full_rename") # Default to full rename
+        self.full_rename_radio = customtkinter.CTkRadioButton(self.right_frame, text="Renombrar completamente (Grupo_001.ext)",
+                                                              variable=self.rename_option_var, value="full_rename")
+        self.full_rename_radio.grid(row=4, column=0, pady=(10, 0), sticky="w")
+
+        self.suffix_rename_radio = customtkinter.CTkRadioButton(self.right_frame, text="Añadir sufijo (Original_Grupo.ext)",
+                                                                variable=self.rename_option_var, value="add_suffix")
+        self.suffix_rename_radio.grid(row=5, column=0, pady=(0, 10), sticky="w", padx=20) # Indent slightly
+
         self.rename_button = customtkinter.CTkButton(self.right_frame, text="Renombrar Imágenes", command=self.rename_images, fg_color="red") # Reparented
-        self.rename_button.grid(row=5, column=0, pady=20)
+        self.rename_button.grid(row=7, column=0, pady=20)
 
     def select_folder(self):
         folder_path = tkinter.filedialog.askdirectory()
@@ -110,10 +123,18 @@ class ImageClassifierApp(customtkinter.CTk):
 
     def load_images_from_folder(self):
         self.image_files = []
+        self.image_groups = {} # Clear existing groups when loading a new folder
         if self.folder_path:
             for filename in os.listdir(self.folder_path):
                 if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
-                    self.image_files.append(os.path.join(self.folder_path, filename))
+                    full_path = os.path.join(self.folder_path, filename)
+                    self.image_files.append(full_path)
+                    
+                    # Attempt to parse group name from filename (e.g., GroupName_001.ext)
+                    match = re.match(r"(.+?)_\d{3}\.(png|jpg|jpeg|gif|bmp)$", filename, re.IGNORECASE)
+                    if match:
+                        group_name = match.group(1)
+                        self.image_groups[full_path] = group_name
         
         self.image_files.sort() # Sort images for consistent order
         self.current_image_index = -1
@@ -187,6 +208,8 @@ class ImageClassifierApp(customtkinter.CTk):
         renamed_count = 0
         errors = []
         
+        rename_mode = self.rename_option_var.get()
+
         # Group images by their assigned group name
         grouped_images = {}
         for img_path, group_name in self.image_groups.items():
@@ -200,28 +223,48 @@ class ImageClassifierApp(customtkinter.CTk):
                 directory, filename = os.path.split(old_path)
                 name, ext = os.path.splitext(filename)
                 
-                new_name = f"{group_name}_{counter:03d}{ext}"
+                new_name_base = ""
+                if rename_mode == "full_rename":
+                    new_name_base = f"{group_name}_{counter:03d}"
+                elif rename_mode == "add_suffix":
+                    # Remove any existing group_XXX suffix if present from previous renames
+                    original_name_match = re.match(r"(.+?)(?:_[A-Za-z0-9]+_\d{3})?$", name) # Adjusted regex to be more flexible for existing suffixes
+                    if original_name_match:
+                        original_base_name = original_name_match.group(1)
+                    else:
+                        original_base_name = name # Fallback if no pattern match
+
+                    new_name_base = f"{original_base_name}_{group_name}"
+                    # If multiple files with same original name get same group, add counter
+                    # This part needs careful consideration to avoid clashes.
+                    # For simplicity, let's just add the counter for uniqueness if needed.
+                    
+                new_name = f"{new_name_base}{ext}"
                 new_path = os.path.join(directory, new_name)
 
                 try:
                     # Ensure the new name doesn't clash with an existing file that's not being renamed
-                    if os.path.exists(new_path) and new_path != old_path:
-                        # If it exists and is not the same file, try to find a unique name
-                        temp_counter = counter
-                        while os.path.exists(new_path) and new_path != old_path:
-                            temp_counter += 1
-                            new_name = f"{group_name}_{temp_counter:03d}{ext}"
-                            new_path = os.path.join(directory, new_name)
-                        
-                        if temp_counter != counter: # If we had to change the name
-                            print(f"Advertencia: '{new_name}' ya existía, usando '{new_name}' en su lugar.")
-                            counter = temp_counter # Update counter for subsequent files in this group
+                    temp_counter = 1
+                    final_new_name = new_name
+                    final_new_path = new_path
 
-                    os.rename(old_path, new_path)
+                    while os.path.exists(final_new_path) and final_new_path != old_path:
+                        if rename_mode == "full_rename":
+                            final_new_name = f"{group_name}_{counter:03d}_{temp_counter:02d}{ext}" # Add extra counter for clash
+                        elif rename_mode == "add_suffix":
+                            final_new_name = f"{new_name_base}_{temp_counter:02d}{ext}" # Add extra counter for clash
+                        
+                        final_new_path = os.path.join(directory, final_new_name)
+                        temp_counter += 1
+                    
+                    if temp_counter > 1:
+                        print(f"Advertencia: '{new_name}' ya existía, usando '{final_new_name}' en su lugar.")
+
+                    os.rename(old_path, final_new_path)
                     renamed_count += 1
-                    print(f"Renombrado: '{old_path}' a '{new_path}'")
+                    print(f"Renombrado: '{old_path}' a '{final_new_path}'")
                 except OSError as e:
-                    errors.append(f"Error al renombrar '{old_path}' a '{new_path}': {e}")
+                    errors.append(f"Error al renombrar '{os.path.basename(old_path)}' a '{os.path.basename(final_new_path)}': {e}")
                 counter += 1
         
         if errors:
