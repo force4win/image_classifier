@@ -89,10 +89,15 @@ class ImageClassifierApp(customtkinter.CTk):
 
         self.suffix_rename_radio = customtkinter.CTkRadioButton(self.right_frame, text="Añadir sufijo (Original_Grupo.ext)",
                                                                 variable=self.rename_option_var, value="add_suffix")
-        self.suffix_rename_radio.grid(row=5, column=0, pady=(0, 10), sticky="w", padx=20) # Indent slightly
+        self.suffix_rename_radio.grid(row=5, column=0, pady=(0, 10), sticky="w") # Removed padx=20
+
+        # Frame para los botones de grupos detectados
+        self.detected_groups_frame = customtkinter.CTkScrollableFrame(self.right_frame, label_text="Grupos Detectados")
+        self.detected_groups_frame.grid(row=6, column=0, padx=10, pady=10, sticky="nsew")
+        self.right_frame.grid_rowconfigure(6, weight=1) # Make this frame expand vertically
 
         self.rename_button = customtkinter.CTkButton(self.right_frame, text="Renombrar Imágenes", command=self.rename_images, fg_color="red") # Reparented
-        self.rename_button.grid(row=7, column=0, pady=20)
+        self.rename_button.grid(row=8, column=0, pady=20)
 
     def select_folder(self):
         folder_path = tkinter.filedialog.askdirectory()
@@ -130,14 +135,34 @@ class ImageClassifierApp(customtkinter.CTk):
                     full_path = os.path.join(self.folder_path, filename)
                     self.image_files.append(full_path)
                     
-                    # Attempt to parse group name from filename (e.g., GroupName_001.ext)
-                    match = re.match(r"(.+?)_\d{3}\.(png|jpg|jpeg|gif|bmp)$", filename, re.IGNORECASE)
-                    if match:
-                        group_name = match.group(1)
+                    # Attempt to parse group name from filename
+                    group_name = None
+                    
+                    # Try to match full_rename pattern: GroupName_001.ext
+                    match_full = re.match(r"(.+?)_\d{3}\.(png|jpg|jpeg|gif|bmp)$", filename, re.IGNORECASE)
+                    if match_full:
+                        group_name = match_full.group(1)
+                    else:
+                        # Try to match add_suffix pattern: OriginalName_GroupName.ext
+                        # This regex assumes the group name is the last part before the extension,
+                        # separated by an underscore, and doesn't contain numbers at the end like _001
+                        match_suffix = re.match(r"(.+?)_([A-Za-z\s]+)\.(png|jpg|jpeg|gif|bmp)$", filename, re.IGNORECASE)
+                        if match_suffix:
+                            # Ensure the captured group name is not just a number (like _001)
+                            potential_group = match_suffix.group(2)
+                            if not potential_group.isdigit(): # Simple check to avoid matching _001 as group
+                                group_name = potential_group
+                    
+                    if group_name:
                         self.image_groups[full_path] = group_name
         
         self.image_files.sort() # Sort images for consistent order
         self.current_image_index = -1
+        
+        # Collect unique group names for buttons
+        unique_groups = sorted(list(set(self.image_groups.values())))
+        self.create_group_buttons(unique_groups)
+
         if self.image_files:
             self.current_image_index = 0
             self.display_image()
@@ -151,6 +176,9 @@ class ImageClassifierApp(customtkinter.CTk):
             image_path = self.image_files[self.current_image_index]
             try:
                 pil_image = Image.open(image_path)
+                
+                # Ensure layout is updated before querying dimensions
+                self.left_frame.update_idletasks()
                 
                 # Resize image to fit within the frame, maintaining aspect ratio
                 max_width = self.left_frame.winfo_width() - 20 # Subtract padding
@@ -277,6 +305,26 @@ class ImageClassifierApp(customtkinter.CTk):
         # Clear groups and reload images to reflect changes
         self.image_groups = {}
         self.load_images_from_folder() # Reload images from the current folder
+
+    def create_group_buttons(self, unique_groups):
+        # Clear existing buttons
+        for widget in self.detected_groups_frame.winfo_children():
+            widget.destroy()
+        
+        if not unique_groups:
+            label = customtkinter.CTkLabel(self.detected_groups_frame, text="No hay grupos detectados.")
+            label.pack(pady=5, padx=5)
+            return
+
+        for group_name in unique_groups:
+            button = customtkinter.CTkButton(self.detected_groups_frame, text=group_name, 
+                                             command=lambda g=group_name: self.assign_group_from_button(g))
+            button.pack(pady=2, padx=5, fill="x")
+
+    def assign_group_from_button(self, group_name):
+        self.group_entry.delete(0, "end")
+        self.group_entry.insert(0, group_name)
+        self.assign_group() # Call the existing assign_group method
 
 if __name__ == "__main__":
     app = ImageClassifierApp()
