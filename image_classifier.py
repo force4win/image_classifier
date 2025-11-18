@@ -25,14 +25,20 @@ class ImageClassifierApp(customtkinter.CTk):
         # Left Frame (Image Display and Navigation)
         self.left_frame = customtkinter.CTkFrame(self)
         self.left_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-        self.left_frame.grid_rowconfigure(0, weight=1)
+        self.left_frame.grid_rowconfigure(0, weight=1) # Image row
+        self.left_frame.grid_rowconfigure(1, weight=0) # Current group label row
+        self.left_frame.grid_rowconfigure(2, weight=0) # Navigation frame row
         self.left_frame.grid_columnconfigure(0, weight=1)
 
         self.displayed_image_label = customtkinter.CTkLabel(self.left_frame, text="")
         self.displayed_image_label.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 
+        # Current group display below image
+        self.current_group_display_label = customtkinter.CTkLabel(self.left_frame, text="Grupo actual: Ninguno", font=customtkinter.CTkFont(size=14, weight="bold"))
+        self.current_group_display_label.grid(row=1, column=0, pady=(5, 0)) # Placed below image
+
         self.navigation_frame = customtkinter.CTkFrame(self.left_frame)
-        self.navigation_frame.grid(row=1, column=0, pady=10)
+        self.navigation_frame.grid(row=2, column=0, pady=10)
 
         self.prev_button = customtkinter.CTkButton(self.navigation_frame, text="Anterior", command=self.show_previous_image)
         self.prev_button.pack(side="left", padx=5)
@@ -78,8 +84,8 @@ class ImageClassifierApp(customtkinter.CTk):
         self.assign_group_button = customtkinter.CTkButton(self.classification_frame, text="Asignar Grupo", command=self.assign_group) # Reparented
         self.assign_group_button.grid(row=1, column=0, columnspan=2, pady=5)
 
-        self.current_group_display_label = customtkinter.CTkLabel(self.classification_frame, text="Grupo actual: Ninguno") # Reparented
-        self.current_group_display_label.grid(row=2, column=0, columnspan=2, pady=5)
+        # self.current_group_display_label = customtkinter.CTkLabel(self.classification_frame, text="Grupo actual: Ninguno") # Reparented
+        # self.current_group_display_label.grid(row=2, column=0, columnspan=2, pady=5)
 
         # Checkbox para opción de renombrado
         self.rename_option_var = customtkinter.StringVar(value="add_suffix") # Default to add suffix
@@ -123,6 +129,15 @@ class ImageClassifierApp(customtkinter.CTk):
                     del self.image_groups[current_image_path]
                 self.current_group_display_label.configure(text="Grupo actual: Ninguno")
                 print(f"Grupo desasignado para la imagen '{os.path.basename(current_image_path)}'")
+            
+            # After assigning/unassigning, refresh the group buttons
+            unique_groups_with_images = {} # {group_name: first_image_path}
+            for img_path in self.image_files:
+                g_name = self.image_groups.get(img_path)
+                if g_name and g_name not in unique_groups_with_images:
+                    unique_groups_with_images[g_name] = img_path
+            sorted_unique_groups_with_images = {k: unique_groups_with_images[k] for k in sorted(unique_groups_with_images)}
+            self.create_group_buttons(sorted_unique_groups_with_images)
         else:
             print("No hay imagen seleccionada para asignar grupo.")
 

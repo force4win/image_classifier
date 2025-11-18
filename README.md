@@ -36,7 +36,7 @@ Una aplicación de escritorio simple para clasificar y renombrar imágenes por g
 1.  Navega al directorio del proyecto en tu terminal:
 
     ```bash
-    cd D:\WORKSPACE\WORKSPACE_PORTFOLIO\CLASIFICADOR_IMAGENES
+    cd [WORKSPACE_DIR]\CLASIFICADOR_IMAGENES
     ```
 
 2.  Ejecuta el script principal:
